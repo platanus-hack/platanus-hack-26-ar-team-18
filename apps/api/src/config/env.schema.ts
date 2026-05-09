@@ -16,6 +16,7 @@ export const EnvSchema = z.object({
   CORS_ORIGIN: z.string().min(1),
 
   ANTHROPIC_API_KEY: z.string().min(1),
+  VOYAGE_API_KEY: z.string().min(1),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

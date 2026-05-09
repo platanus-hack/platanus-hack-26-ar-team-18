@@ -1,4 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+import type { Env } from '../../config/env.schema';
+
+interface VoyageEmbeddingResponse {
+  data: Array<{ embedding: number[]; index: number }>;
+  model: string;
+  usage: { total_tokens: number };
+}
 
 @Injectable()
 export class VoyageClient {
@@ -8,11 +17,8 @@ export class VoyageClient {
   private readonly model = 'voyage-3';
   private readonly timeout = 15000;
 
-  constructor() {
-    this.apiKey = process.env.VOYAGE_API_KEY;
-    if (!this.apiKey) {
-      this.logger.warn('VOYAGE_API_KEY not set - embedding functionality will fail');
-    }
+  constructor(config: ConfigService<Env, true>) {
+    this.apiKey = config.get('VOYAGE_API_KEY', { infer: true });
   }
 
   async embed(
@@ -44,7 +50,7 @@ export class VoyageClient {
         clearTimeout(timeoutHandle);
 
         if (!response.ok) {
-          const error = await response.text();
+          const errorBody = await response.text();
 
           // Rate limit - retry with exponential backoff
           if (response.status === 429 && attempt < maxRetries) {
@@ -56,12 +62,10 @@ export class VoyageClient {
             continue;
           }
 
-          throw new Error(
-            `Voyage API error ${response.status}: ${error}`,
-          );
+          throw new Error(`Voyage API error ${response.status}: ${errorBody}`);
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as VoyageEmbeddingResponse;
         const embedding = data.data?.[0]?.embedding;
 
         if (!Array.isArray(embedding)) {
@@ -69,12 +73,12 @@ export class VoyageClient {
         }
 
         return embedding;
-      } catch (error) {
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
         lastError = error;
 
         // Timeout or abort - retry with backoff
         if (
-          error instanceof Error &&
           (error.name === 'AbortError' || error.message.includes('signal')) &&
           attempt < maxRetries
         ) {
@@ -89,11 +93,11 @@ export class VoyageClient {
         // Other errors - don't retry, fail fast
         if (attempt === maxRetries) {
           this.logger.error(`Voyage embed failed after ${maxRetries + 1} attempts`, error);
-          throw lastError || error;
+          throw lastError;
         }
       }
     }
 
-    throw lastError || new Error('Voyage embed failed');
+    throw lastError ?? new Error('Voyage embed failed');
   }
 }
