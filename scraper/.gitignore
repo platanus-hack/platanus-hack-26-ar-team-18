@@ -1,0 +1,10 @@
+
+*.pyc
+*.csv
+*.xls
+*.ipynb
+*.html
+.vscode/settings.json
+.venv/
+.env
+.DS_Store
