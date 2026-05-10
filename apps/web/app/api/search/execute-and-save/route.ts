@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { getAuthenticatedUserId } from '../../../../lib/auth';
 import { executeAndSave } from '../../../../lib/search/executor';
 import { EMPTY_FILTERS, type SearchFilters } from '../../../../lib/search/types';
 
@@ -11,6 +12,11 @@ interface ExecuteRequestBody {
 }
 
 export async function POST(req: Request) {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   let body: ExecuteRequestBody;
   try {
     body = (await req.json()) as ExecuteRequestBody;
@@ -33,7 +39,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await executeAndSave(filters);
+    const result = await executeAndSave(filters, userId);
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
     console.error('[search:execute-and-save] failed:', err);

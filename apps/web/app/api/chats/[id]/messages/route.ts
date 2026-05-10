@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { getAuthenticatedUserId } from '../../../../../lib/auth';
 import { sendOutbound } from '../../../../../lib/kapso/messaging';
 import { createServiceClient } from '../../../../../lib/supabase/service';
 
@@ -11,6 +12,11 @@ interface SendBody {
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { id } = await ctx.params;
   let payload: SendBody;
   try {
@@ -25,8 +31,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const supabase = createServiceClient();
   const { data: chat, error } = await supabase
     .from('chats')
-    .select('id, phone_e164, last_inbound_at')
+    .select('id, phone_e164, last_inbound_at, user_id')
     .eq('id', id)
+    .eq('user_id', userId)
     .single();
 
   if (error || !chat) {

@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server';
 
+import { getAuthenticatedUserId } from '../../../../lib/auth';
 import { runChatTurn } from '../../../../lib/search/agent';
-import { getCurrentClientUserId, loadClientProfile, persistProfileUpdates } from '../../../../lib/search/profile';
+import { loadClientProfile, persistProfileUpdates } from '../../../../lib/search/profile';
 import { EMPTY_FILTERS, type ChatRequest } from '../../../../lib/search/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   let body: ChatRequest;
   try {
     body = (await req.json()) as ChatRequest;
@@ -23,7 +29,6 @@ export async function POST(req: Request) {
   const filters = { ...EMPTY_FILTERS, ...(body.filters ?? {}) };
 
   try {
-    const userId = await getCurrentClientUserId();
     const profileBefore = await loadClientProfile(userId);
 
     const agent = await runChatTurn({ messages, filters, profile: profileBefore, selectedPills });

@@ -60,9 +60,12 @@ function getClient(): Anthropic {
   return anthropic;
 }
 
-export async function executeAndSave(filters: SearchFilters): Promise<ExecuteAndSaveResult> {
+export async function executeAndSave(
+  filters: SearchFilters,
+  authenticatedUserId?: string,
+): Promise<ExecuteAndSaveResult> {
   const supabase = createServiceClient();
-  const userId = await getCurrentClientUserId();
+  const userId = authenticatedUserId ?? (await getCurrentClientUserId());
   const profile = await loadClientProfile(userId);
 
   const candidates = await queryProperties(filters);
@@ -131,9 +134,7 @@ export async function executeAndSave(filters: SearchFilters): Promise<ExecuteAnd
   }));
 
   // Trigger analysis generation for items with score > 70 (fire-and-forget)
-  const itemsNeedingAnalysis = enriched
-    .filter(({ score }) => score > 70)
-    .map(({ p }) => p);
+  const itemsNeedingAnalysis = enriched.filter(({ score }) => score > 70).map(({ p }) => p);
 
   if (itemsNeedingAnalysis.length > 0) {
     triggerAnalysisGeneration(itemsNeedingAnalysis).catch((err) => {
@@ -172,17 +173,13 @@ async function queryProperties(filters: SearchFilters): Promise<PropiedadRow[]> 
   const supabase = createServiceClient();
 
   async function run(cols: string): Promise<PropQueryResult> {
-    let q = (
-      supabase.from('propiedades' as never) as unknown as PropQueryBuilder
-    )
+    let q = (supabase.from('propiedades' as never) as unknown as PropQueryBuilder)
       .select(cols)
       .not('url', 'is', null);
 
     if (filters.neighborhoods.length > 0) {
       // Use ilike for each neighborhood so "Palermo" matches "Palermo Soho", "Palermo Hollywood", etc.
-      const orFilter = filters.neighborhoods
-        .map((n) => `neighborhood.ilike.%${n}%`)
-        .join(',');
+      const orFilter = filters.neighborhoods.map((n) => `neighborhood.ilike.%${n}%`).join(',');
       q = q.or(orFilter);
     }
     if (filters.price_max !== null) {
@@ -215,7 +212,11 @@ async function queryProperties(filters: SearchFilters): Promise<PropiedadRow[]> 
 function scoreCandidate(p: PropiedadRow, filters: SearchFilters): number {
   let score = 60;
 
-  if (filters.neighborhoods.length > 0 && p.neighborhood && filters.neighborhoods.includes(p.neighborhood)) {
+  if (
+    filters.neighborhoods.length > 0 &&
+    p.neighborhood &&
+    filters.neighborhoods.includes(p.neighborhood)
+  ) {
     score += 15;
   }
   if (filters.price_max !== null && p.price_value !== null && p.price_value <= filters.price_max) {
@@ -232,7 +233,9 @@ function scoreCandidate(p: PropiedadRow, filters: SearchFilters): number {
     const hay = stripAccents(
       `${p.description ?? ''} ${p.description_summary ?? ''} ${p.address ?? ''} ${p.neighborhood ?? ''}`.toLowerCase(),
     );
-    const hits = features.filter((f) => hay.includes(stripAccents(f.replace(/_/g, ' ').toLowerCase()))).length;
+    const hits = features.filter((f) =>
+      hay.includes(stripAccents(f.replace(/_/g, ' ').toLowerCase())),
+    ).length;
     score += Math.min(15, hits * 5);
   }
 
@@ -294,8 +297,12 @@ Cada pro/con: máximo 8 palabras. Sin emojis. Sin invenciones: si no hay info, o
     const parsed = JSON.parse(text) as Partial<AISummary>;
     return {
       summary: typeof parsed.summary === 'string' ? parsed.summary : fallbackSummary(p),
-      pros: Array.isArray(parsed.pros) ? parsed.pros.filter((s): s is string => typeof s === 'string').slice(0, 4) : [],
-      cons: Array.isArray(parsed.cons) ? parsed.cons.filter((s): s is string => typeof s === 'string').slice(0, 4) : [],
+      pros: Array.isArray(parsed.pros)
+        ? parsed.pros.filter((s): s is string => typeof s === 'string').slice(0, 4)
+        : [],
+      cons: Array.isArray(parsed.cons)
+        ? parsed.cons.filter((s): s is string => typeof s === 'string').slice(0, 4)
+        : [],
     };
   } catch {
     return { summary: fallbackSummary(p), pros: [], cons: [] };
@@ -306,7 +313,9 @@ function fallbackSummary(p: PropiedadRow): string {
   const where = p.neighborhood ?? p.city ?? 'CABA';
   const ambs = p.rooms ? `${p.rooms} amb` : 'depto';
   const m2 = p.square_meters_area ? `${Math.round(p.square_meters_area)} m²` : '';
-  const price = p.price_value ? `${p.price_type === 'USD' ? 'USD' : '$'} ${new Intl.NumberFormat('es-AR').format(Math.round(p.price_value))}` : '';
+  const price = p.price_value
+    ? `${p.price_type === 'USD' ? 'USD' : '$'} ${new Intl.NumberFormat('es-AR').format(Math.round(p.price_value))}`
+    : '';
   return `${ambs} en ${where}${m2 ? `, ${m2}` : ''}${price ? `, ${price}` : ''}.`;
 }
 
@@ -325,7 +334,10 @@ async function triggerAnalysisGeneration(properties: PropiedadRow[]): Promise<vo
       });
       console.log(`[executor] triggered analysis for ${prop.posting_id}`);
     } catch (err) {
-      console.warn(`[executor] failed to trigger analysis for ${prop.posting_id}:`, (err as Error).message);
+      console.warn(
+        `[executor] failed to trigger analysis for ${prop.posting_id}:`,
+        (err as Error).message,
+      );
     }
   }
 }

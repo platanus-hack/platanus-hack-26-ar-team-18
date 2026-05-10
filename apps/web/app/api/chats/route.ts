@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 
+import { getAuthenticatedUserId } from '../../../lib/auth';
 import { kapsoEnv } from '../../../lib/kapso/env';
 import { sendOutbound } from '../../../lib/kapso/messaging';
 import { toE164 } from '../../../lib/kapso/phone';
 import { createServiceClient } from '../../../lib/supabase/service';
-import { createClient } from '../../../lib/supabase/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,11 @@ interface CreateChatBody {
 }
 
 export async function POST(req: Request) {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   let body: CreateChatBody;
   try {
     body = (await req.json()) as CreateChatBody;
@@ -25,8 +30,6 @@ export async function POST(req: Request) {
   }
 
   const env = kapsoEnv();
-  const userClient = await createClient();
-  const { data: { user } } = await userClient.auth.getUser();
 
   // Resolve destination phone: explicit `phone`, or pulled from `propiedades.seller_whatsapp_digits`.
   const supabase = createServiceClient();
@@ -40,9 +43,13 @@ export async function POST(req: Request) {
       .eq('posting_id' as never, postingId as never)
       .maybeSingle();
     if (propErr) {
-      return NextResponse.json({ error: `Propiedad lookup failed: ${propErr.message}` }, { status: 500 });
+      return NextResponse.json(
+        { error: `Propiedad lookup failed: ${propErr.message}` },
+        { status: 500 },
+      );
     }
-    const sellerPhone = (prop as { seller_whatsapp_digits?: string | null } | null)?.seller_whatsapp_digits ?? null;
+    const sellerPhone =
+      (prop as { seller_whatsapp_digits?: string | null } | null)?.seller_whatsapp_digits ?? null;
     if (!sellerPhone) {
       return NextResponse.json({ error: 'Propiedad sin seller_whatsapp_digits' }, { status: 404 });
     }
@@ -56,7 +63,10 @@ export async function POST(req: Request) {
   try {
     phoneE164 = toE164(phoneRaw, env.KAPSO_DEFAULT_COUNTRY_ISO);
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Invalid phone' }, { status: 400 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Invalid phone' },
+      { status: 400 },
+    );
   }
 
   // Upsert chat by phone (one chat per destination).
@@ -64,6 +74,7 @@ export async function POST(req: Request) {
     .from('chats')
     .select('id, phone_e164, last_inbound_at')
     .eq('phone_e164', phoneE164)
+    .eq('user_id', userId)
     .maybeSingle();
 
   let chat = existing;
@@ -74,12 +85,15 @@ export async function POST(req: Request) {
         phone_e164: phoneE164,
         propiedad_posting_id: postingId,
         contact_name: body.contact_name ?? null,
-        user_id: user?.id ?? null,
+        user_id: userId,
       })
       .select('id, phone_e164, last_inbound_at')
       .single();
     if (error || !created) {
-      return NextResponse.json({ error: error?.message ?? 'Failed to create chat' }, { status: 500 });
+      return NextResponse.json(
+        { error: error?.message ?? 'Failed to create chat' },
+        { status: 500 },
+      );
     }
     chat = created;
   }

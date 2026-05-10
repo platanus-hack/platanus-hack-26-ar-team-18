@@ -31,8 +31,13 @@ export function kapsoEnv(): KapsoEnv {
     KAPSO_WEBHOOK_SECRET: process.env.KAPSO_WEBHOOK_SECRET,
   });
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
+    const issues = parsed.error.issues
+      .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
+      .join('\n');
     throw new Error(`Invalid Kapso env vars (set them in apps/web/.env or Vercel):\n${issues}`);
+  }
+  if (process.env.NODE_ENV === 'production' && !parsed.data.KAPSO_WEBHOOK_SECRET) {
+    throw new Error('Invalid Kapso env vars: KAPSO_WEBHOOK_SECRET is required in production');
   }
   cached = parsed.data;
   return cached;
