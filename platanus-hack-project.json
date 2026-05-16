@@ -1,5 +1,6 @@
 {
-  "project-name": "Casa fast",
-  "project-oneliner-spanish": "Encuentra tu hogar ideal en minutos con Casa Fast: análisis de mercado, recomendaciones personalizadas y concreta visitas al instante.",
-  "deploy-url" : "https://casita-fast.vercel.app"
+  "project-name": "casita-fast",
+  "project-description-spanish": "casita-fast es una plataforma inmobiliaria asistida por inteligencia artificial que ayuda a las personas a encontrar propiedades más rápido, evitando horas de búsqueda manual entre publicaciones repetidas, precios inflados y vendedores que no responden. El sistema analiza opciones inmobiliarias, filtra oportunidades relevantes y actúa como un agente que decide qué vendedores contactar, conversa con ellos y avanza el proceso hasta acercar al usuario a una visita o primera reunión.",
+  "project-oneliner-spanish": "Agente inmobiliario de IA que busca, filtra y contacta vendedores para encontrar propiedades más rápido.",
+  "deploy-url": "https://casita-fast.vercel.app/"
 }
